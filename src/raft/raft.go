@@ -191,14 +191,17 @@ func (rf *Raft) RequestVote(args RequestVoteArgs, reply *RequestVoteReply) {
 		rf.CurrentTerm = args.Term
 		//preState := rf.State
 		rf.State = "Follower"
-		rf.VotedFor = args.CandidateId
 		//fmt.Println("RV.Node:",rf.me," ",preState,"->",rf.State," Term:",rf.CurrentTerm)
-		reply.VoteGranted = true
 		reply.Term = rf.CurrentTerm
+		reply.VoteGranted = true
 		rf.chanGrantVote <- true
+		rf.VotedFor = args.CandidateId
 	}
-	reply.Term = rf.CurrentTerm
-
+	if rf.VotedFor==-1||rf.VotedFor == args.CandidateId {
+		reply.VoteGranted = true
+		rf.chanGrantVote <- true
+		rf.VotedFor = args.CandidateId
+	}
 }
 
 //
@@ -223,17 +226,16 @@ func (rf *Raft) sendRequestVote(server int, args RequestVoteArgs, reply *Request
 	return ok
 }
 func (rf *Raft) handleRequestVote(reply RequestVoteReply) {
-
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	if reply.Term > rf.CurrentTerm {
 		rf.CurrentTerm = reply.Term
 		rf.State = "Follower"
 		rf.VotedFor = -1
-		rf.persist()
 	}
 	if reply.VoteGranted {
 		rf.VoteCount++
 		if rf.VoteCount > len(rf.peers)/2 && rf.State == "Candidate" {
-			rf.State = "Follower"
 			rf.chanLeader <- true
 		}
 	}
@@ -241,12 +243,9 @@ func (rf *Raft) handleRequestVote(reply RequestVoteReply) {
 
 func (rf *Raft) AppendEntries(args AppendEntriesArgs, reply *AppendEntriesReply) {
 	// Your code here.
-	//rf.mu.Lock()
-	//defer rf.mu.Unlock()
-	//fmt.Println(rf.me,rf.State,rf.CurrentTerm)
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	reply.Success = false
-	//fmt.Println("Node:",args.LeaderId," Term:",args.Term)
-	//fmt.Println("Node:",rf.me," Term:",rf.CurrentTerm)
 	if args.Term < rf.CurrentTerm {
 		reply.Term = rf.CurrentTerm
 		return
@@ -273,7 +272,7 @@ func (rf *Raft) sendAppendEntries(server int, args AppendEntriesArgs, reply *App
 func (rf *Raft) handleAppendEntries(reply AppendEntriesReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	if !reply.Success {
+	if reply.Success {
 		return
 	}
 	if reply.Term > rf.CurrentTerm {
@@ -281,8 +280,6 @@ func (rf *Raft) handleAppendEntries(reply AppendEntriesReply) {
 		rf.State = "Follower"
 		//fmt.Println("SA.Node:", rf.me, "Leader->", rf.State, " Term:", rf.CurrentTerm)
 		rf.VotedFor = -1
-		rf.VoteCount = -1
-		rf.persist()
 		return
 	}
 }
