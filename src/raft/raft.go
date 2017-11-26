@@ -81,6 +81,9 @@ type Raft struct {
 	Timer *time.Timer
 }
 
+func (rf *Raft) ResetTimer() {
+	rint := rand.Intn(150) + 150
+	rf.Timer = time.NewTimer(time.Duration(rint) * time.Millisecond)
 }
 
 // return currentTerm and whether this server
