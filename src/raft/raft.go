@@ -26,6 +26,7 @@ import (
 	//"bytes"
 	//"encoding/gob"
 	//"fmt"
+	"fmt"
 )
 
 // import "bytes"
@@ -97,6 +98,11 @@ func (rf *Raft) GetState() (int, bool) {
 	//fmt.Println(isleader,rf.me,rf.State)
 	term = rf.CurrentTerm
 	return term, isleader
+}
+func (rf *Raft) GetLastIndex() (int) {
+	var index int
+
+	return index
 }
 
 //func (rf *Raft) getLastIndex() int {
@@ -336,10 +342,19 @@ func (rf *Raft) broadcastAppendEntries() {
 // the leader.
 //
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
-	index := -1
-	term := -1
-	isLeader := rf.State == "Leader"
 
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	term := rf.CurrentTerm
+	index, _ := rf.logsLastIndexAndTerm()
+	index += 2
+	isLeader := rf.state == leader
+
+	// Your code here (2B).
+	if isLeader {
+		rf.logs = append(rf.logs, logEntry{command, term})
+		rf.persist()
+	}
 	return index, term, isLeader
 }
 
@@ -402,7 +417,7 @@ func (rf *Raft) Loop() {
 		case "Leader":
 			rf.LeaderLoop()
 		}
-		//fmt.Println("Node:", rf.me, " State:", rf.State, "Term:", rf.CurrentTerm)
+		fmt.Println("Node:", rf.me, " State:", rf.State, "Term:", rf.CurrentTerm)
 	}
 }
 
