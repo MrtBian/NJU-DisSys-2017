@@ -397,7 +397,7 @@ func (cfg *config) one(cmd int, expectedServers int) int {
 				index1, _, ok := rf.Start(cmd)
 				if ok {
 					index = index1
-					fmt.Printf("Leader: %d\n", rf.me)
+					//fmt.Printf("Leader: %d\n", rf.me)
 					break
 				}
 			}
