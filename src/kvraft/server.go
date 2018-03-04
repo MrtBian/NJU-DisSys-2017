@@ -22,6 +22,7 @@ type Op struct {
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
 <<<<<<< HEAD
+<<<<<<< HEAD
 	Key      string
 	Value    string
 	Op       string // "Get", "Put" or "Append"
@@ -32,6 +33,8 @@ type Op struct {
 type LatestReply struct {
 	Seq   int      // latest request
 	Reply GetReply // latest reply
+=======
+>>>>>>> parent of df1a00b... finish
 =======
 >>>>>>> parent of df1a00b... finish
 }
@@ -45,6 +48,7 @@ type RaftKV struct {
 	maxraftstate int // snapshot if log grows this big
 
 	// Your definitions here.
+<<<<<<< HEAD
 <<<<<<< HEAD
 	persist       *raft.Persister
 	db            map[string]string
@@ -116,10 +120,15 @@ func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
 	}
 =======
 }
+=======
+}
+
+>>>>>>> parent of df1a00b... finish
 
 
 func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
 	// Your code here.
+<<<<<<< HEAD
 >>>>>>> parent of df1a00b... finish
 }
 
@@ -172,6 +181,12 @@ func (kv *RaftKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 		return
 	}
 =======
+>>>>>>> parent of df1a00b... finish
+=======
+}
+
+func (kv *RaftKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
+	// Your code here.
 >>>>>>> parent of df1a00b... finish
 }
 
@@ -243,10 +258,13 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.persist = persister
 =======
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
+<<<<<<< HEAD
 >>>>>>> parent of df1a00b... finish
 
 	// shutdown channel
 	kv.shutdownCh = make(chan struct{})
+=======
+>>>>>>> parent of df1a00b... finish
 
 <<<<<<< HEAD
 	// duplication detection table: client->seq no.-> reply
@@ -258,7 +276,10 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 
 	return kv
 }
+<<<<<<< HEAD
 =======
 	return kv
 }
+>>>>>>> parent of df1a00b... finish
+=======
 >>>>>>> parent of df1a00b... finish
