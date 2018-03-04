@@ -23,7 +23,6 @@ type Op struct {
 	// otherwise RPC will break.
 <<<<<<< HEAD
 <<<<<<< HEAD
-<<<<<<< HEAD
 	Key      string
 	Value    string
 	Op       string // "Get", "Put" or "Append"
@@ -34,8 +33,6 @@ type Op struct {
 type LatestReply struct {
 	Seq   int      // latest request
 	Reply GetReply // latest reply
-=======
->>>>>>> parent of df1a00b... finish
 =======
 >>>>>>> parent of df1a00b... finish
 =======
@@ -51,7 +48,6 @@ type RaftKV struct {
 	maxraftstate int // snapshot if log grows this big
 
 	// Your definitions here.
-<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 	persist       *raft.Persister
@@ -126,17 +122,12 @@ func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
 }
 =======
 }
-=======
-}
-
->>>>>>> parent of df1a00b... finish
 
 >>>>>>> parent of df1a00b... finish
 
 
 func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
 	// Your code here.
-<<<<<<< HEAD
 <<<<<<< HEAD
 >>>>>>> parent of df1a00b... finish
 }
@@ -192,15 +183,10 @@ func (kv *RaftKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 =======
 >>>>>>> parent of df1a00b... finish
 =======
-=======
->>>>>>> parent of df1a00b... finish
 }
 
 func (kv *RaftKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	// Your code here.
-<<<<<<< HEAD
->>>>>>> parent of df1a00b... finish
-=======
 >>>>>>> parent of df1a00b... finish
 }
 
@@ -273,7 +259,6 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 =======
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
 <<<<<<< HEAD
-<<<<<<< HEAD
 >>>>>>> parent of df1a00b... finish
 
 	// shutdown channel
@@ -284,8 +269,6 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 <<<<<<< HEAD
 	// duplication detection table: client->seq no.-> reply
 	kv.duplicate = make(map[int64]*LatestReply)
-=======
->>>>>>> parent of df1a00b... finish
 
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
 
@@ -294,12 +277,9 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	return kv
 }
 <<<<<<< HEAD
-<<<<<<< HEAD
 =======
 	return kv
 }
->>>>>>> parent of df1a00b... finish
-=======
 >>>>>>> parent of df1a00b... finish
 =======
 >>>>>>> parent of df1a00b... finish
