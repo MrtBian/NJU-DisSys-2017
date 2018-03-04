@@ -9,14 +9,13 @@ type Err string
 
 // Put or Append
 type PutAppendArgs struct {
-	// You'll have to add definitions here.
 	Key   string
 	Value string
 	Op    string // "Put" or "Append"
+
 	// You'll have to add definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
-<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 
@@ -26,10 +25,6 @@ type PutAppendArgs struct {
 >>>>>>> parent of df1a00b... finish
 =======
 >>>>>>> parent of df1a00b... finish
-=======
-	ClientID 	int64
-	RequestID	int
->>>>>>> parent of 60e9924... fix
 }
 
 type PutAppendReply struct {
@@ -42,17 +37,12 @@ type GetArgs struct {
 	// You'll have to add definitions here.
 <<<<<<< HEAD
 <<<<<<< HEAD
-<<<<<<< HEAD
 	ClientID int64
 	SeqNo    int
 =======
 >>>>>>> parent of df1a00b... finish
 =======
 >>>>>>> parent of df1a00b... finish
-=======
-	ClientID  int64
-	RequestID int
->>>>>>> parent of 60e9924... fix
 }
 
 type GetReply struct {

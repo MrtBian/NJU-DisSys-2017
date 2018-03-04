@@ -2,14 +2,11 @@ package raftkv
 
 <<<<<<< HEAD
 <<<<<<< HEAD
-<<<<<<< HEAD
-=======
-import "../labrpc"
-import "crypto/rand"
->>>>>>> parent of 60e9924... fix
 import (
 	"math/big"
-	"sync"
+	"crypto/rand"
+	"../labrpc"
+	"time"
 )
 =======
 import "labrpc"
@@ -22,11 +19,11 @@ import "crypto/rand"
 import "math/big"
 >>>>>>> parent of df1a00b... finish
 
+var clients = make(map[int64]bool)
 
 type Clerk struct {
 	servers []*labrpc.ClientEnd
 	// You will have to modify this struct.
-<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 
@@ -37,13 +34,6 @@ type Clerk struct {
 >>>>>>> parent of df1a00b... finish
 =======
 >>>>>>> parent of df1a00b... finish
-=======
-	id        int64
-	requestID int
-	mu        sync.Mutex
-	preLeader int
-
->>>>>>> parent of 60e9924... fix
 }
 
 func nrand() int64 {
@@ -53,11 +43,22 @@ func nrand() int64 {
 	return x
 }
 
+func generateID() int64 {
+	for {
+		x := nrand()
+		if clients[x] {
+			continue
+		}
+		clients[x] = true
+		return x
+	}
+}
+
 func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	ck := new(Clerk)
 	ck.servers = servers
+
 	// You'll have to add code here.
-<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 	ck.leader = len(servers)
@@ -70,11 +71,6 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 >>>>>>> parent of df1a00b... finish
 =======
 >>>>>>> parent of df1a00b... finish
-=======
-	ck.id = nrand()
-	ck.preLeader = 0
-	ck.requestID = 0
->>>>>>> parent of 60e9924... fix
 	return ck
 }
 
@@ -91,35 +87,41 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 // arguments. and reply must be passed as a pointer.
 //
 func (ck *Clerk) Get(key string) string {
-
+	DPrintf("Clerk: Get: %q\n", key)
 	// You will have to modify this function.
 <<<<<<< HEAD
 <<<<<<< HEAD
-<<<<<<< HEAD
 	cnt := len(ck.servers)
-=======
-	ck.mu.Lock()
-	args := GetArgs{Key: key, ClientID: ck.id}
-	args.RequestID = ck.requestID
-	ck.requestID++
-	ck.mu.Unlock()
->>>>>>> parent of 60e9924... fix
 	for {
-		reply := GetReply{}
-		ok := ck.servers[ck.preLeader].Call("RaftKV.Get", &args, &reply)
-		if ok && reply.WrongLeader == false {
-			return reply.Value
+		args := &GetArgs{Key: key, ClientID: ck.id, SeqNo: ck.seq}
+		reply := new(GetReply)
+
+		ck.leader %= cnt
+		done := make(chan bool, 1)
+		go func() {
+			ok := ck.servers[ck.leader].Call("RaftKV.Get", args, reply)
+			done <- ok
+		}()
+		select {
+		case <-time.After(200 * time.Millisecond): // rpc timeout: 200ms
+			ck.leader++
+			continue
+		case ok := <-done:
+			if ok && !reply.WrongLeader {
+				ck.seq++
+				if reply.Err == OK {
+					return reply.Value
+				}
+				return ""
+			}
+			ck.leader++
 		}
-		ck.preLeader = (ck.preLeader + 1) % len(ck.servers)
 	}
-<<<<<<< HEAD
 =======
 >>>>>>> parent of df1a00b... finish
 =======
 >>>>>>> parent of df1a00b... finish
 	return ""
-=======
->>>>>>> parent of 60e9924... fix
 }
 
 //
@@ -133,26 +135,32 @@ func (ck *Clerk) Get(key string) string {
 // arguments. and reply must be passed as a pointer.
 //
 func (ck *Clerk) PutAppend(key string, value string, op string) {
+	DPrintf("Clerk: PutAppend: %q => (%q,%q) from: %d\n", op, key, value, ck.id)
 	// You will have to modify this function.
 <<<<<<< HEAD
 <<<<<<< HEAD
-<<<<<<< HEAD
 	cnt := len(ck.servers)
-=======
-	ck.mu.Lock()
-	args := PutAppendArgs{Key: key, Value: value, Op: op, ClientID: ck.id}
-	args.RequestID = ck.requestID
-	ck.requestID++
-	ck.mu.Unlock()
->>>>>>> parent of 60e9924... fix
 	for {
+		args := &PutAppendArgs{Key: key, Value: value, Op: op, ClientID: ck.id, SeqNo: ck.seq}
+		reply := new(PutAppendReply)
 
-		reply := PutAppendReply{}
-		ok := ck.servers[ck.preLeader].Call("RaftKV.PutAppend", &args, &reply)
-		if ok && reply.WrongLeader == false {
-			return
+		ck.leader %= cnt
+		done := make(chan bool, 1)
+		go func() {
+			ok := ck.servers[ck.leader].Call("RaftKV.PutAppend", args, reply)
+			done <- ok
+		}()
+		select {
+		case <-time.After(200 * time.Millisecond): // rpc timeout: 200ms
+			ck.leader++
+			continue
+		case ok := <-done:
+			if ok && !reply.WrongLeader && reply.Err == OK {
+				ck.seq++
+				return
+			}
+			ck.leader++
 		}
-		ck.preLeader = (ck.preLeader + 1) % len(ck.servers)
 	}
 =======
 >>>>>>> parent of df1a00b... finish

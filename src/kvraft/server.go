@@ -6,8 +6,6 @@ import (
 	"log"
 	"raft"
 	"sync"
-	"time"
-	"bytes"
 )
 
 const Debug = 0
@@ -19,12 +17,10 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 	return
 }
 
-
 type Op struct {
 	// Your definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
-<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 	Key      string
@@ -41,13 +37,6 @@ type LatestReply struct {
 >>>>>>> parent of df1a00b... finish
 =======
 >>>>>>> parent of df1a00b... finish
-=======
-	Type      string
-	Key       string
-	Value     string
-	ClientID  int64
-	RequestID int
->>>>>>> parent of 60e9924... fix
 }
 
 type RaftKV struct {
@@ -61,7 +50,6 @@ type RaftKV struct {
 	// Your definitions here.
 <<<<<<< HEAD
 <<<<<<< HEAD
-<<<<<<< HEAD
 	persist       *raft.Persister
 	db            map[string]string
 	snapshotIndex int
@@ -72,56 +60,63 @@ type RaftKV struct {
 
 	// duplication detection table
 	duplicate map[int64]*LatestReply
-=======
-	kvDB   map[string]string
-	dup    map[int64]int
-	result map[int]chan Op
-	killCh chan bool
->>>>>>> parent of 60e9924... fix
-}
-
-func (kv *RaftKV) AppendEntry(entry Op) bool {
-	index, _, isLeader := kv.rf.Start(entry)
-	if !isLeader {
-		return false
-	}
-
-	kv.mu.Lock()
-	ch, ok := kv.result[index]
-
-	if !ok {
-		ch = make(chan Op, 1)
-		kv.result[index] = ch
-	}
-	kv.mu.Unlock()
-
-	select {
-	case op := <-ch:
-		return op.ClientID == entry.ClientID && op.RequestID == entry.RequestID
-	case <-time.After(800 * time.Millisecond):
-		return false
-	}
-	return false
 }
 
 func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
 	// Your code here.
-	entry := Op{Type: "Get", Key: args.Key, ClientID: args.ClientID, RequestID: args.RequestID}
-
-	ok := kv.AppendEntry(entry)
-	if !ok {
+	// not leader
+	if _, isLeader := kv.rf.GetState(); !isLeader {
 		reply.WrongLeader = true
-	} else {
-		reply.WrongLeader = false
-		reply.Err = OK
+		reply.Err = ""
+		return
+	}
+
+	DPrintf("[%d]: leader %d receive rpc: Get(%q).\n", kv.me, kv.me, args.Key)
+
+	kv.mu.Lock()
+	// duplicate put/append request
+	if dup, ok := kv.duplicate[args.ClientID]; ok {
+		// filter duplicate
+		if args.SeqNo <= dup.Seq {
+			kv.mu.Unlock()
+			reply.WrongLeader = false
+			reply.Err = OK
+			reply.Value = dup.Reply.Value
+			return
+		}
+	}
+
+	cmd := Op{Key: args.Key, Op: "Get", ClientID: args.ClientID, SeqNo: args.SeqNo}
+	index, term, _ := kv.rf.Start(cmd)
+
+	ch := make(chan struct{})
+	kv.notifyChs[index] = ch
+
+	kv.mu.Unlock()
+
+	reply.WrongLeader = false
+	reply.Err = OK
+
+	// wait for Raft to complete agreement
+	select {
+	case <-ch:
+		// lose leadership
+		curTerm, isLeader := kv.rf.GetState()
+		// what if still leader, but different term? let client retry
+		if !isLeader || term != curTerm {
+			reply.WrongLeader = true
+			reply.Err = ""
+			return
+		}
 
 		kv.mu.Lock()
-		reply.Value, ok = kv.kvDB[args.Key]
-		if !ok {
-			reply.Value = ""
+		if value, ok := kv.db[args.Key]; ok {
+			reply.Value = value
+		} else {
+			reply.Err = ErrNoKey
 		}
-		kv.dup[args.ClientID] = args.RequestID
 		kv.mu.Unlock()
+	case <-kv.shutdownCh:
 	}
 =======
 }
@@ -139,19 +134,51 @@ func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
 
 func (kv *RaftKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	// Your code here.
-<<<<<<< HEAD
 <<<<<<< HEAD
 	// not leader
 	if _, isLeader := kv.rf.GetState(); !isLeader {
-=======
-	entry := Op{Type: args.Op, Key: args.Key, Value: args.Value, ClientID: args.ClientID, RequestID: args.RequestID}
-	ok := kv.AppendEntry(entry)
-	if !ok {
->>>>>>> parent of 60e9924... fix
 		reply.WrongLeader = true
-	} else {
-		reply.WrongLeader = false
-		reply.Err = OK
+		reply.Err = ""
+		return
+	}
+
+	DPrintf("[%d]: leader %d receive rpc: PutAppend(%q => (%q,%q), (%d-%d).\n", kv.me, kv.me,
+		args.Op, args.Key, args.Value, args.ClientID, args.SeqNo)
+
+	kv.mu.Lock()
+	// duplicate put/append request
+	if dup, ok := kv.duplicate[args.ClientID]; ok {
+		// filter duplicate
+		if args.SeqNo <= dup.Seq {
+			kv.mu.Unlock()
+			reply.WrongLeader = false
+			reply.Err = OK
+			return
+		}
+	}
+
+	// new request
+	cmd := Op{Key: args.Key, Value: args.Value, Op: args.Op, ClientID: args.ClientID, SeqNo: args.SeqNo}
+	index, term, _ := kv.rf.Start(cmd)
+	ch := make(chan struct{})
+	kv.notifyChs[index] = ch
+	kv.mu.Unlock()
+
+	reply.WrongLeader = false
+	reply.Err = OK
+
+	// wait for Raft to complete agreement
+	select {
+	case <-ch:
+		// lose leadership
+		curTerm, isLeader := kv.rf.GetState()
+		if !isLeader || term != curTerm {
+			reply.WrongLeader = true
+			reply.Err = ""
+			return
+		}
+	case <-kv.shutdownCh:
+		return
 	}
 =======
 >>>>>>> parent of df1a00b... finish
@@ -162,6 +189,29 @@ func (kv *RaftKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	// Your code here.
 >>>>>>> parent of df1a00b... finish
 }
+
+// applyDaemon receive applyMsg from Raft layer, apply to Key-Value state machine
+// then notify related client if is leader
+func (kv *RaftKV) applyDaemon() {
+	for {
+		select {
+		case <-kv.shutdownCh:
+			DPrintf("[%d]: server %d is shutting down.\n", kv.me, kv.me)
+			return
+		case msg, ok := <-kv.applyCh:
+			if ok {
+
+					// notify channel
+					if notifyCh, ok := kv.notifyChs[msg.Index]; ok && notifyCh != nil {
+						close(notifyCh)
+						delete(kv.notifyChs, msg.Index)
+					}
+				}
+			}
+		}
+	}
+
+
 
 //
 // the tester calls Kill() when a RaftKV instance won't
@@ -170,9 +220,9 @@ func (kv *RaftKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 // turn off debug output from this instance.
 //
 func (kv *RaftKV) Kill() {
+	close(kv.shutdownCh)
 	kv.rf.Kill()
 	// Your code here, if desired.
-	close(kv.killCh)
 }
 
 //
@@ -197,7 +247,6 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.me = me
 	kv.maxraftstate = maxraftstate
 
-<<<<<<< HEAD
 	// You may need initialization code here.
 	kv.applyCh = make(chan raft.ApplyMsg)
 <<<<<<< HEAD
@@ -220,24 +269,13 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 <<<<<<< HEAD
 	// duplication detection table: client->seq no.-> reply
 	kv.duplicate = make(map[int64]*LatestReply)
-=======
-	// Your initialization code here.
->>>>>>> parent of 60e9924... fix
 
-	kv.applyCh = make(chan raft.ApplyMsg)
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
-	kv.kvDB = make(map[string]string)
-	kv.result = make(map[int]chan Op)
-	kv.dup = make(map[int64]int)
-	kv.killCh = make(chan bool)
 
-	go kv.run()
-	return kv
-
+	go kv.applyDaemon()
 
 	return kv
 }
-<<<<<<< HEAD
 <<<<<<< HEAD
 =======
 	return kv
@@ -245,69 +283,3 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 >>>>>>> parent of df1a00b... finish
 =======
 >>>>>>> parent of df1a00b... finish
-=======
-func (kv *RaftKV) run() {
-	for {
-		select {
-		case msg := <-kv.applyCh:
-			if msg.UseSnapshot {
-				var LastIncludedIndex int
-				var LastIncludedTerm int
-				r := bytes.NewBuffer(msg.Snapshot)
-				d := gob.NewDecoder(r)
-				kv.mu.Lock()
-				d.Decode(&LastIncludedIndex)
-				d.Decode(&LastIncludedTerm)
-				kv.kvDB = make(map[string]string)
-				kv.dup = make(map[int64]int)
-				d.Decode(&kv.kvDB)
-				d.Decode(&kv.dup)
-				kv.mu.Unlock()
-			} else {
-				index := msg.Index
-				op := msg.Command.(Op)
-				kv.mu.Lock()
-				if !kv.isDup(&op) {
-					switch op.Type {
-					case "Put":
-						kv.kvDB[op.Key] = op.Value
-					case "Append":
-						kv.kvDB[op.Key] += op.Value
-					}
-					kv.dup[op.ClientID] = op.RequestID
-				}
-				ch, ok := kv.result[index]
-				if ok {
-					select {
-					case <-kv.result[index]:
-					case <-kv.killCh:
-						return
-					default:
-					}
-					ch <- op
-				} else {
-					kv.result[index] = make(chan Op, 1)
-				}
-				if kv.maxraftstate != -1 && kv.rf.GetPerisistSize() > kv.maxraftstate {
-					w := new(bytes.Buffer)
-					e := gob.NewEncoder(w)
-					e.Encode(kv.kvDB)
-					e.Encode(kv.dup)
-				}
-				kv.mu.Unlock()
-			}
-		case <-kv.killCh:
-			return
-		}
-	}
-}
-
-func (kv *RaftKV) isDup(op *Op) bool {
-	v, ok := kv.dup[op.ClientID]
-	if ok {
-		return v >= op.RequestID
-	} else {
-		return false
-	}
-}
->>>>>>> parent of 60e9924... fix
