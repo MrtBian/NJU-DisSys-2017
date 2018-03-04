@@ -1,7 +1,6 @@
 package raftkv
 
 import (
-	"bytes"
 	"encoding/gob"
 	"../labrpc"
 	"log"
@@ -19,33 +18,29 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 	return
 }
 
-const (
-	OP_PUT    = "Put"
-	OP_GET    = "Get"
-	OP_APPEND = "Append"
-)
 
 type Op struct {
 	// Your definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
 
-	Kind  string
+	Op    string
 	Key   string
 	Value string
-	RequstArgs
+	ClientID  int64
+	RequestNo int
 }
 
 func (op *Op) isEqual(other Op) bool {
-	if other.Kind != op.Kind {
+	if other.Op != op.Op {
 		return false
 	}
 
-	switch op.Kind {
-	case OP_GET, OP_APPEND:
-		return other.Key == op.Key && other.Kind == op.Kind &&
-			other.RequstArgs == op.RequstArgs
-	case OP_PUT:
+	switch op.Op {
+	case "Get", "Append":
+		return other.Key == op.Key && other.Op == op.Op &&
+			other.ClientID == op.ClientID && other.RequestNo == op.RequestNo
+	case "Put":
 		return other == *op
 	default:
 		return false
@@ -80,7 +75,7 @@ type RaftKV struct {
 func (kv *RaftKV) commitLog(op Op) CommitReply {
 	kv.mu.Lock()
 	var reply CommitReply
-	reply.op.Kind = op.Kind
+	reply.op.Op = op.Op
 	reply.op.Key = op.Key
 	_, isLeader := kv.rf.GetState()
 
@@ -92,7 +87,7 @@ func (kv *RaftKV) commitLog(op Op) CommitReply {
 	}
 
 	// duplicate request, just return data
-	if kv.history[op.Session] >= op.RequstID {
+	if kv.history[op.ClientID] >= op.RequestNo {
 		reply.err = OK
 		reply.op.Value = kv.data[op.Key]
 		kv.mu.Unlock()
@@ -125,7 +120,7 @@ func (kv *RaftKV) commitLog(op Op) CommitReply {
 
 func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
 	// Your code here.
-	logEntry := Op{Kind: OP_GET, Key: args.Key, RequstArgs: RequstArgs{Session: args.Session, RequstID: args.RequstID}}
+	logEntry := Op{Op: "Get", Key: args.Key, ClientID: args.ClientID, RequestNo: args.RequestNo}
 	commitRpl := kv.commitLog(logEntry)
 	reply.Err = commitRpl.err
 	reply.WrongLeader = commitRpl.err == ErrNotLeader
@@ -134,7 +129,7 @@ func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
 
 func (kv *RaftKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	// Your code here.
-	logEntry := Op{Kind: args.Op, Key: args.Key, Value: args.Value, RequstArgs: RequstArgs{Session: args.Session, RequstID: args.RequstID}}
+	logEntry := Op{Op: args.Op, Key: args.Key, Value: args.Value, ClientID: args.ClientID, RequestNo: args.RequestNo}
 	commitRpl := kv.commitLog(logEntry)
 	reply.Err = commitRpl.err
 	reply.WrongLeader = commitRpl.err == ErrNotLeader
@@ -146,26 +141,26 @@ func (kv *RaftKV) applyLog(op Op) ApplyReply {
 	reply.op = op
 
 	// duplicate request, just return data
-	if kv.history[op.Session] >= op.RequstID {
+	if kv.history[op.ClientID] >= op.RequestNo {
 		reply.op.Value = kv.data[op.Key]
 		return reply
 	}
 
 	// apply log
-	switch op.Kind {
-	case OP_GET:
+	switch op.Op {
+	case "Get":
 		_, ok := kv.data[op.Key]
 		if !ok {
 			reply.err = ErrNoKey
 		}
-	case OP_PUT:
+	case "Put":
 		kv.data[op.Key] = op.Value
-	case OP_APPEND:
+	case "Append":
 		kv.data[op.Key] += op.Value
 	}
 	reply.op.Value = kv.data[op.Key]
 	// save session
-	kv.history[op.Session] = op.RequstID
+	kv.history[op.ClientID] = op.RequestNo
 
 	return reply
 }
@@ -176,11 +171,6 @@ func (kv *RaftKV) watch() {
 			kv.mu.Lock()
 			defer kv.mu.Unlock()
 
-			// use snapshot to restore state.
-			if msg.UseSnapshot {
-				kv.restoreSnapshot(msg.Snapshot)
-				return
-			}
 
 			op := msg.Command.(Op)
 			applyReply := kv.applyLog(op)
@@ -195,21 +185,7 @@ func (kv *RaftKV) watch() {
 	}
 }
 
-func (kv *RaftKV) saveSnapshot(index int) {
-	w := new(bytes.Buffer)
-	e := gob.NewEncoder(w)
-	e.Encode(kv.data)
-	e.Encode(kv.history)
-}
 
-func (kv *RaftKV) restoreSnapshot(data []byte) {
-	r := bytes.NewBuffer(data)
-	d := gob.NewDecoder(r)
-	kv.data = make(map[string]string)
-	kv.history = make(map[int64]int)
-	d.Decode(&kv.data)
-	d.Decode(&kv.history)
-}
 
 //
 // the tester calls Kill() when a RaftKV instance won't

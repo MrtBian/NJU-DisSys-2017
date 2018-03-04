@@ -12,7 +12,7 @@ type Clerk struct {
 	// You will have to modify this struct.
 	mu        sync.Mutex
 	requestID int
-	seesionID int64
+	clientID  int64
 	leader    int
 }
 
@@ -27,7 +27,7 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	ck := new(Clerk)
 	ck.servers = servers
 	// You'll have to add code here.
-	ck.seesionID = nrand()
+	ck.clientID = nrand()
 	ck.requestID = 1
 	ck.leader = 0
 
@@ -49,11 +49,8 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 func (ck *Clerk) Get(key string) string {
 
 	// You will have to modify this function.
-	var args GetArgs
-	args.Key = key
 	ck.mu.Lock()
-	args.Session = ck.seesionID
-	args.RequstID = ck.requestID
+	args := GetArgs{Key:key,ClientID:ck.clientID,RequestNo:ck.requestID}
 	ck.requestID++
 	ck.mu.Unlock()
 
@@ -62,7 +59,9 @@ func (ck *Clerk) Get(key string) string {
 			var reply GetReply
 			ok := ck.servers[i].Call("RaftKV.Get", &args, &reply)
 			if ok && !reply.WrongLeader {
-				ck.SaveLeader(i)
+				ck.mu.Lock()
+				ck.leader = i
+				ck.mu.Unlock()
 				switch reply.Err {
 				case OK:
 					return reply.Value
@@ -90,22 +89,19 @@ func (ck *Clerk) Get(key string) string {
 //
 func (ck *Clerk) PutAppend(key string, value string, op string) {
 	// You will have to modify this function.
-	var args PutAppendArgs
-	args.Key = key
-	args.Value = value
-	args.Op = op
 	ck.mu.Lock()
-	args.Session = ck.seesionID
-	args.RequstID = ck.requestID
+	args := PutAppendArgs{Key:key,Value:value,Op:op,ClientID:
+		ck.clientID,RequestNo:ck.requestID}
 	ck.requestID++
 	ck.mu.Unlock()
-
 	for {
 		for i := ck.leader; ; {
 			var reply PutAppendReply
 			ok := ck.servers[i].Call("RaftKV.PutAppend", &args, &reply)
 			if ok && !reply.WrongLeader {
-				ck.SaveLeader(i)
+				ck.mu.Lock()
+				ck.leader = i
+				ck.mu.Unlock()
 				switch reply.Err {
 				case OK:
 					return
@@ -126,8 +122,8 @@ func (ck *Clerk) SaveLeader(serve int) {
 }
 
 func (ck *Clerk) Put(key string, value string) {
-	ck.PutAppend(key, value, OP_PUT)
+	ck.PutAppend(key, value, "Put")
 }
 func (ck *Clerk) Append(key string, value string) {
-	ck.PutAppend(key, value, OP_APPEND)
+	ck.PutAppend(key, value, "Append")
 }
