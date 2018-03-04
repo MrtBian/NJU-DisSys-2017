@@ -2,9 +2,9 @@ package raftkv
 
 import (
 	"encoding/gob"
-	"../labrpc"
+	"labrpc"
 	"log"
-	"../raft"
+	"raft"
 	"sync"
 )
 
@@ -21,6 +21,7 @@ type Op struct {
 	// Your definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
+<<<<<<< HEAD
 	Key      string
 	Value    string
 	Op       string // "Get", "Put" or "Append"
@@ -31,6 +32,8 @@ type Op struct {
 type LatestReply struct {
 	Seq   int      // latest request
 	Reply GetReply // latest reply
+=======
+>>>>>>> parent of df1a00b... finish
 }
 
 type RaftKV struct {
@@ -42,6 +45,7 @@ type RaftKV struct {
 	maxraftstate int // snapshot if log grows this big
 
 	// Your definitions here.
+<<<<<<< HEAD
 	persist       *raft.Persister
 	db            map[string]string
 	snapshotIndex int
@@ -110,10 +114,18 @@ func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
 		kv.mu.Unlock()
 	case <-kv.shutdownCh:
 	}
+=======
+}
+
+
+func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
+	// Your code here.
+>>>>>>> parent of df1a00b... finish
 }
 
 func (kv *RaftKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	// Your code here.
+<<<<<<< HEAD
 	// not leader
 	if _, isLeader := kv.rf.GetState(); !isLeader {
 		reply.WrongLeader = true
@@ -159,6 +171,8 @@ func (kv *RaftKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	case <-kv.shutdownCh:
 		return
 	}
+=======
+>>>>>>> parent of df1a00b... finish
 }
 
 // applyDaemon receive applyMsg from Raft layer, apply to Key-Value state machine
@@ -220,16 +234,21 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 
 	// You may need initialization code here.
 	kv.applyCh = make(chan raft.ApplyMsg)
+<<<<<<< HEAD
 
 	// You may need initialization code here.
 	// store key-value pairs
 	kv.db = make(map[string]string)
 	kv.notifyChs = make(map[int]chan struct{})
 	kv.persist = persister
+=======
+	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
+>>>>>>> parent of df1a00b... finish
 
 	// shutdown channel
 	kv.shutdownCh = make(chan struct{})
 
+<<<<<<< HEAD
 	// duplication detection table: client->seq no.-> reply
 	kv.duplicate = make(map[int64]*LatestReply)
 
@@ -239,3 +258,7 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 
 	return kv
 }
+=======
+	return kv
+}
+>>>>>>> parent of df1a00b... finish

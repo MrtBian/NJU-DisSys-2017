@@ -1,21 +1,30 @@
 package raftkv
 
+<<<<<<< HEAD
 import (
 	"math/big"
 	"crypto/rand"
 	"../labrpc"
 	"time"
 )
+=======
+import "labrpc"
+import "crypto/rand"
+import "math/big"
+>>>>>>> parent of df1a00b... finish
 
 var clients = make(map[int64]bool)
 
 type Clerk struct {
 	servers []*labrpc.ClientEnd
 	// You will have to modify this struct.
+<<<<<<< HEAD
 
 	leader int   // remember last leader
 	seq    int   // RPC sequence number
 	id     int64 // client id
+=======
+>>>>>>> parent of df1a00b... finish
 }
 
 func nrand() int64 {
@@ -41,12 +50,15 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	ck.servers = servers
 
 	// You'll have to add code here.
+<<<<<<< HEAD
 	ck.leader = len(servers)
 	ck.seq = 1
 	ck.id = generateID()
 
 	DPrintf("Clerk: %d\n", ck.id)
 
+=======
+>>>>>>> parent of df1a00b... finish
 	return ck
 }
 
@@ -65,6 +77,7 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 func (ck *Clerk) Get(key string) string {
 	DPrintf("Clerk: Get: %q\n", key)
 	// You will have to modify this function.
+<<<<<<< HEAD
 	cnt := len(ck.servers)
 	for {
 		args := &GetArgs{Key: key, ClientID: ck.id, SeqNo: ck.seq}
@@ -91,6 +104,8 @@ func (ck *Clerk) Get(key string) string {
 			ck.leader++
 		}
 	}
+=======
+>>>>>>> parent of df1a00b... finish
 	return ""
 }
 
@@ -107,6 +122,7 @@ func (ck *Clerk) Get(key string) string {
 func (ck *Clerk) PutAppend(key string, value string, op string) {
 	DPrintf("Clerk: PutAppend: %q => (%q,%q) from: %d\n", op, key, value, ck.id)
 	// You will have to modify this function.
+<<<<<<< HEAD
 	cnt := len(ck.servers)
 	for {
 		args := &PutAppendArgs{Key: key, Value: value, Op: op, ClientID: ck.id, SeqNo: ck.seq}
@@ -130,6 +146,8 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 			ck.leader++
 		}
 	}
+=======
+>>>>>>> parent of df1a00b... finish
 }
 
 func (ck *Clerk) Put(key string, value string) {
