@@ -1,30 +1,28 @@
 package raftkv
 
 const (
-	OK       = "OK"
-	ErrNoKey = "ErrNoKey"
+	OK           = "OK"
+	ErrNoKey     = "ErrNoKey"
+	ErrNotLeader = "ErrNotLeader"
+	ErrCommit    = "ErrCommit"
 )
 
 type Err string
+
+type RequstArgs struct {
+	Session  int64
+	RequstID int
+}
 
 // Put or Append
 type PutAppendArgs struct {
 	Key   string
 	Value string
 	Op    string // "Put" or "Append"
-
 	// You'll have to add definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
-<<<<<<< HEAD
-<<<<<<< HEAD
-
-	ClientID int64 // for duplicate request detection
-	SeqNo    int   // sequence no
-=======
->>>>>>> parent of df1a00b... finish
-=======
->>>>>>> parent of df1a00b... finish
+	RequstArgs
 }
 
 type PutAppendReply struct {
@@ -35,14 +33,7 @@ type PutAppendReply struct {
 type GetArgs struct {
 	Key string
 	// You'll have to add definitions here.
-<<<<<<< HEAD
-<<<<<<< HEAD
-	ClientID int64
-	SeqNo    int
-=======
->>>>>>> parent of df1a00b... finish
-=======
->>>>>>> parent of df1a00b... finish
+	RequstArgs
 }
 
 type GetReply struct {

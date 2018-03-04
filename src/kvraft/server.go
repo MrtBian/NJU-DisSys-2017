@@ -1,11 +1,13 @@
 package raftkv
 
 import (
+	"bytes"
 	"encoding/gob"
-	"labrpc"
+	"../labrpc"
 	"log"
-	"raft"
+	"../raft"
 	"sync"
+	"time"
 )
 
 const Debug = 0
@@ -17,27 +19,49 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 	return
 }
 
+const (
+	OP_PUT    = "Put"
+	OP_GET    = "Get"
+	OP_APPEND = "Append"
+)
+
 type Op struct {
 	// Your definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
-<<<<<<< HEAD
-<<<<<<< HEAD
-	Key      string
-	Value    string
-	Op       string // "Get", "Put" or "Append"
-	ClientID int64  // client id
-	SeqNo    int    // request sequence number
+
+	Kind  string
+	Key   string
+	Value string
+	RequstArgs
 }
 
-type LatestReply struct {
-	Seq   int      // latest request
-	Reply GetReply // latest reply
-=======
->>>>>>> parent of df1a00b... finish
-=======
->>>>>>> parent of df1a00b... finish
+func (op *Op) isEqual(other Op) bool {
+	if other.Kind != op.Kind {
+		return false
+	}
+
+	switch op.Kind {
+	case OP_GET, OP_APPEND:
+		return other.Key == op.Key && other.Kind == op.Kind &&
+			other.RequstArgs == op.RequstArgs
+	case OP_PUT:
+		return other == *op
+	default:
+		return false
+	}
 }
+
+type CommitReply struct {
+	// CommitReply object send back from watch goroutine inlucde
+	// some information the RPC call need to reply to client.
+	op  Op
+	err Err
+}
+
+// ApplyReply include some information the RaftKV whether or not
+// apply some log success.
+type ApplyReply CommitReply
 
 type RaftKV struct {
 	mu      sync.Mutex
@@ -48,170 +72,144 @@ type RaftKV struct {
 	maxraftstate int // snapshot if log grows this big
 
 	// Your definitions here.
-<<<<<<< HEAD
-<<<<<<< HEAD
-	persist       *raft.Persister
-	db            map[string]string
-	snapshotIndex int
-	notifyChs     map[int]chan struct{} // per log
-
-	// shutdown chan
-	shutdownCh chan struct{}
-
-	// duplication detection table
-	duplicate map[int64]*LatestReply
+	data        map[string]string
+	commitReply map[int]chan CommitReply
+	history     map[int64]int // client session map to committed requestID
 }
 
-func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
-	// Your code here.
-	// not leader
-	if _, isLeader := kv.rf.GetState(); !isLeader {
-		reply.WrongLeader = true
-		reply.Err = ""
-		return
-	}
-
-	DPrintf("[%d]: leader %d receive rpc: Get(%q).\n", kv.me, kv.me, args.Key)
-
+func (kv *RaftKV) commitLog(op Op) CommitReply {
 	kv.mu.Lock()
-	// duplicate put/append request
-	if dup, ok := kv.duplicate[args.ClientID]; ok {
-		// filter duplicate
-		if args.SeqNo <= dup.Seq {
-			kv.mu.Unlock()
-			reply.WrongLeader = false
-			reply.Err = OK
-			reply.Value = dup.Reply.Value
-			return
-		}
-	}
+	var reply CommitReply
+	reply.op.Kind = op.Kind
+	reply.op.Key = op.Key
+	_, isLeader := kv.rf.GetState()
 
-	cmd := Op{Key: args.Key, Op: "Get", ClientID: args.ClientID, SeqNo: args.SeqNo}
-	index, term, _ := kv.rf.Start(cmd)
-
-	ch := make(chan struct{})
-	kv.notifyChs[index] = ch
-
-	kv.mu.Unlock()
-
-	reply.WrongLeader = false
-	reply.Err = OK
-
-	// wait for Raft to complete agreement
-	select {
-	case <-ch:
-		// lose leadership
-		curTerm, isLeader := kv.rf.GetState()
-		// what if still leader, but different term? let client retry
-		if !isLeader || term != curTerm {
-			reply.WrongLeader = true
-			reply.Err = ""
-			return
-		}
-
-		kv.mu.Lock()
-		if value, ok := kv.db[args.Key]; ok {
-			reply.Value = value
-		} else {
-			reply.Err = ErrNoKey
-		}
+	// not leader return
+	if !isLeader {
 		kv.mu.Unlock()
-	case <-kv.shutdownCh:
+		reply.err = ErrNotLeader
+		return reply
 	}
-=======
-}
-=======
-}
 
->>>>>>> parent of df1a00b... finish
+	// duplicate request, just return data
+	if kv.history[op.Session] >= op.RequstID {
+		reply.err = OK
+		reply.op.Value = kv.data[op.Key]
+		kv.mu.Unlock()
+		return reply
+	}
 
+	// commit log
+	index, term, isLeader := kv.rf.Start(op)
+	ch := make(chan CommitReply, 1)
+	kv.commitReply[index] = ch
+	kv.mu.Unlock()
+	defer func() {
+		kv.mu.Lock()
+		defer kv.mu.Unlock()
+		close(kv.commitReply[index])
+		delete(kv.commitReply, index)
+	}()
+
+	select {
+	case reply = <-ch:
+		currentTerm, _ := kv.rf.GetState()
+		if !op.isEqual(reply.op) || term != currentTerm {
+			reply.err = ErrNotLeader
+		}
+	case <-time.After(time.Second):
+		reply.err = ErrCommit
+	}
+	return reply
+}
 
 func (kv *RaftKV) Get(args *GetArgs, reply *GetReply) {
 	// Your code here.
-<<<<<<< HEAD
->>>>>>> parent of df1a00b... finish
+	logEntry := Op{Kind: OP_GET, Key: args.Key, RequstArgs: RequstArgs{Session: args.Session, RequstID: args.RequstID}}
+	commitRpl := kv.commitLog(logEntry)
+	reply.Err = commitRpl.err
+	reply.WrongLeader = commitRpl.err == ErrNotLeader
+	reply.Value = commitRpl.op.Value
 }
 
 func (kv *RaftKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	// Your code here.
-<<<<<<< HEAD
-	// not leader
-	if _, isLeader := kv.rf.GetState(); !isLeader {
-		reply.WrongLeader = true
-		reply.Err = ""
-		return
-	}
-
-	DPrintf("[%d]: leader %d receive rpc: PutAppend(%q => (%q,%q), (%d-%d).\n", kv.me, kv.me,
-		args.Op, args.Key, args.Value, args.ClientID, args.SeqNo)
-
-	kv.mu.Lock()
-	// duplicate put/append request
-	if dup, ok := kv.duplicate[args.ClientID]; ok {
-		// filter duplicate
-		if args.SeqNo <= dup.Seq {
-			kv.mu.Unlock()
-			reply.WrongLeader = false
-			reply.Err = OK
-			return
-		}
-	}
-
-	// new request
-	cmd := Op{Key: args.Key, Value: args.Value, Op: args.Op, ClientID: args.ClientID, SeqNo: args.SeqNo}
-	index, term, _ := kv.rf.Start(cmd)
-	ch := make(chan struct{})
-	kv.notifyChs[index] = ch
-	kv.mu.Unlock()
-
-	reply.WrongLeader = false
-	reply.Err = OK
-
-	// wait for Raft to complete agreement
-	select {
-	case <-ch:
-		// lose leadership
-		curTerm, isLeader := kv.rf.GetState()
-		if !isLeader || term != curTerm {
-			reply.WrongLeader = true
-			reply.Err = ""
-			return
-		}
-	case <-kv.shutdownCh:
-		return
-	}
-=======
->>>>>>> parent of df1a00b... finish
-=======
+	logEntry := Op{Kind: args.Op, Key: args.Key, Value: args.Value, RequstArgs: RequstArgs{Session: args.Session, RequstID: args.RequstID}}
+	commitRpl := kv.commitLog(logEntry)
+	reply.Err = commitRpl.err
+	reply.WrongLeader = commitRpl.err == ErrNotLeader
 }
 
-func (kv *RaftKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
-	// Your code here.
->>>>>>> parent of df1a00b... finish
+func (kv *RaftKV) applyLog(op Op) ApplyReply {
+	var reply ApplyReply
+	reply.err = OK
+	reply.op = op
+
+	// duplicate request, just return data
+	if kv.history[op.Session] >= op.RequstID {
+		reply.op.Value = kv.data[op.Key]
+		return reply
+	}
+
+	// apply log
+	switch op.Kind {
+	case OP_GET:
+		_, ok := kv.data[op.Key]
+		if !ok {
+			reply.err = ErrNoKey
+		}
+	case OP_PUT:
+		kv.data[op.Key] = op.Value
+	case OP_APPEND:
+		kv.data[op.Key] += op.Value
+	}
+	reply.op.Value = kv.data[op.Key]
+	// save session
+	kv.history[op.Session] = op.RequstID
+
+	return reply
 }
 
-// applyDaemon receive applyMsg from Raft layer, apply to Key-Value state machine
-// then notify related client if is leader
-func (kv *RaftKV) applyDaemon() {
-	for {
-		select {
-		case <-kv.shutdownCh:
-			DPrintf("[%d]: server %d is shutting down.\n", kv.me, kv.me)
-			return
-		case msg, ok := <-kv.applyCh:
-			if ok {
+func (kv *RaftKV) watch() {
+	for msg := range kv.applyCh {
+		func() {
+			kv.mu.Lock()
+			defer kv.mu.Unlock()
 
-					// notify channel
-					if notifyCh, ok := kv.notifyChs[msg.Index]; ok && notifyCh != nil {
-						close(notifyCh)
-						delete(kv.notifyChs, msg.Index)
-					}
-				}
+			// use snapshot to restore state.
+			if msg.UseSnapshot {
+				kv.restoreSnapshot(msg.Snapshot)
+				return
 			}
-		}
+
+			op := msg.Command.(Op)
+			applyReply := kv.applyLog(op)
+
+			// only leader have reply channel
+			rplChan, ok := kv.commitReply[msg.Index]
+			if ok {
+				rplChan <- CommitReply(applyReply)
+			}
+
+		}()
 	}
+}
 
+func (kv *RaftKV) saveSnapshot(index int) {
+	w := new(bytes.Buffer)
+	e := gob.NewEncoder(w)
+	e.Encode(kv.data)
+	e.Encode(kv.history)
+}
 
+func (kv *RaftKV) restoreSnapshot(data []byte) {
+	r := bytes.NewBuffer(data)
+	d := gob.NewDecoder(r)
+	kv.data = make(map[string]string)
+	kv.history = make(map[int64]int)
+	d.Decode(&kv.data)
+	d.Decode(&kv.history)
+}
 
 //
 // the tester calls Kill() when a RaftKV instance won't
@@ -220,7 +218,6 @@ func (kv *RaftKV) applyDaemon() {
 // turn off debug output from this instance.
 //
 func (kv *RaftKV) Kill() {
-	close(kv.shutdownCh)
 	kv.rf.Kill()
 	// Your code here, if desired.
 }
@@ -248,38 +245,15 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.maxraftstate = maxraftstate
 
 	// You may need initialization code here.
-	kv.applyCh = make(chan raft.ApplyMsg)
-<<<<<<< HEAD
+
+	kv.applyCh = make(chan raft.ApplyMsg, 100)
+	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
+	kv.data = make(map[string]string)
+	kv.history = make(map[int64]int)
+	kv.commitReply = make(map[int]chan CommitReply)
 
 	// You may need initialization code here.
-	// store key-value pairs
-	kv.db = make(map[string]string)
-	kv.notifyChs = make(map[int]chan struct{})
-	kv.persist = persister
-=======
-	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
-<<<<<<< HEAD
->>>>>>> parent of df1a00b... finish
-
-	// shutdown channel
-	kv.shutdownCh = make(chan struct{})
-=======
->>>>>>> parent of df1a00b... finish
-
-<<<<<<< HEAD
-	// duplication detection table: client->seq no.-> reply
-	kv.duplicate = make(map[int64]*LatestReply)
-
-	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
-
-	go kv.applyDaemon()
+	go kv.watch()
 
 	return kv
 }
-<<<<<<< HEAD
-=======
-	return kv
-}
->>>>>>> parent of df1a00b... finish
-=======
->>>>>>> parent of df1a00b... finish

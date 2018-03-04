@@ -1,39 +1,19 @@
 package raftkv
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 import (
-	"math/big"
 	"crypto/rand"
 	"../labrpc"
-	"time"
+	"math/big"
+	"sync"
 )
-=======
-import "labrpc"
-import "crypto/rand"
-import "math/big"
->>>>>>> parent of df1a00b... finish
-=======
-import "labrpc"
-import "crypto/rand"
-import "math/big"
->>>>>>> parent of df1a00b... finish
-
-var clients = make(map[int64]bool)
 
 type Clerk struct {
 	servers []*labrpc.ClientEnd
 	// You will have to modify this struct.
-<<<<<<< HEAD
-<<<<<<< HEAD
-
-	leader int   // remember last leader
-	seq    int   // RPC sequence number
-	id     int64 // client id
-=======
->>>>>>> parent of df1a00b... finish
-=======
->>>>>>> parent of df1a00b... finish
+	mu        sync.Mutex
+	requestID int
+	seesionID int64
+	leader    int
 }
 
 func nrand() int64 {
@@ -43,34 +23,14 @@ func nrand() int64 {
 	return x
 }
 
-func generateID() int64 {
-	for {
-		x := nrand()
-		if clients[x] {
-			continue
-		}
-		clients[x] = true
-		return x
-	}
-}
-
 func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	ck := new(Clerk)
 	ck.servers = servers
-
 	// You'll have to add code here.
-<<<<<<< HEAD
-<<<<<<< HEAD
-	ck.leader = len(servers)
-	ck.seq = 1
-	ck.id = generateID()
+	ck.seesionID = nrand()
+	ck.requestID = 1
+	ck.leader = 0
 
-	DPrintf("Clerk: %d\n", ck.id)
-
-=======
->>>>>>> parent of df1a00b... finish
-=======
->>>>>>> parent of df1a00b... finish
 	return ck
 }
 
@@ -87,41 +47,35 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 // arguments. and reply must be passed as a pointer.
 //
 func (ck *Clerk) Get(key string) string {
-	DPrintf("Clerk: Get: %q\n", key)
-	// You will have to modify this function.
-<<<<<<< HEAD
-<<<<<<< HEAD
-	cnt := len(ck.servers)
-	for {
-		args := &GetArgs{Key: key, ClientID: ck.id, SeqNo: ck.seq}
-		reply := new(GetReply)
 
-		ck.leader %= cnt
-		done := make(chan bool, 1)
-		go func() {
-			ok := ck.servers[ck.leader].Call("RaftKV.Get", args, reply)
-			done <- ok
-		}()
-		select {
-		case <-time.After(200 * time.Millisecond): // rpc timeout: 200ms
-			ck.leader++
-			continue
-		case ok := <-done:
+	// You will have to modify this function.
+	var args GetArgs
+	args.Key = key
+	ck.mu.Lock()
+	args.Session = ck.seesionID
+	args.RequstID = ck.requestID
+	ck.requestID++
+	ck.mu.Unlock()
+
+	for {
+		for i := ck.leader; ; {
+			var reply GetReply
+			ok := ck.servers[i].Call("RaftKV.Get", &args, &reply)
 			if ok && !reply.WrongLeader {
-				ck.seq++
-				if reply.Err == OK {
+				ck.SaveLeader(i)
+				switch reply.Err {
+				case OK:
 					return reply.Value
+				case ErrNoKey:
+					return ""
+				default:
+					continue
 				}
-				return ""
 			}
-			ck.leader++
+			i++
+			i %= len(ck.servers)
 		}
 	}
-=======
->>>>>>> parent of df1a00b... finish
-=======
->>>>>>> parent of df1a00b... finish
-	return ""
 }
 
 //
@@ -135,42 +89,45 @@ func (ck *Clerk) Get(key string) string {
 // arguments. and reply must be passed as a pointer.
 //
 func (ck *Clerk) PutAppend(key string, value string, op string) {
-	DPrintf("Clerk: PutAppend: %q => (%q,%q) from: %d\n", op, key, value, ck.id)
 	// You will have to modify this function.
-<<<<<<< HEAD
-<<<<<<< HEAD
-	cnt := len(ck.servers)
-	for {
-		args := &PutAppendArgs{Key: key, Value: value, Op: op, ClientID: ck.id, SeqNo: ck.seq}
-		reply := new(PutAppendReply)
+	var args PutAppendArgs
+	args.Key = key
+	args.Value = value
+	args.Op = op
+	ck.mu.Lock()
+	args.Session = ck.seesionID
+	args.RequstID = ck.requestID
+	ck.requestID++
+	ck.mu.Unlock()
 
-		ck.leader %= cnt
-		done := make(chan bool, 1)
-		go func() {
-			ok := ck.servers[ck.leader].Call("RaftKV.PutAppend", args, reply)
-			done <- ok
-		}()
-		select {
-		case <-time.After(200 * time.Millisecond): // rpc timeout: 200ms
-			ck.leader++
-			continue
-		case ok := <-done:
-			if ok && !reply.WrongLeader && reply.Err == OK {
-				ck.seq++
-				return
+	for {
+		for i := ck.leader; ; {
+			var reply PutAppendReply
+			ok := ck.servers[i].Call("RaftKV.PutAppend", &args, &reply)
+			if ok && !reply.WrongLeader {
+				ck.SaveLeader(i)
+				switch reply.Err {
+				case OK:
+					return
+				default:
+					continue
+				}
 			}
-			ck.leader++
+			i++
+			i %= len(ck.servers)
 		}
 	}
-=======
->>>>>>> parent of df1a00b... finish
-=======
->>>>>>> parent of df1a00b... finish
+}
+
+func (ck *Clerk) SaveLeader(serve int) {
+	ck.mu.Lock()
+	defer ck.mu.Unlock()
+	ck.leader = serve
 }
 
 func (ck *Clerk) Put(key string, value string) {
-	ck.PutAppend(key, value, "Put")
+	ck.PutAppend(key, value, OP_PUT)
 }
 func (ck *Clerk) Append(key string, value string) {
-	ck.PutAppend(key, value, "Append")
+	ck.PutAppend(key, value, OP_APPEND)
 }
