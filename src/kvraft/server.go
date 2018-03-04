@@ -69,7 +69,7 @@ type RaftKV struct {
 	// Your definitions here.
 	data        map[string]string
 	commitReply map[int]chan CommitReply
-	history     map[int64]int // client session map to committed requestID
+	history     map[int64]int
 }
 
 func (kv *RaftKV) commitLog(op Op) CommitReply {
@@ -86,7 +86,6 @@ func (kv *RaftKV) commitLog(op Op) CommitReply {
 		return reply
 	}
 
-	// duplicate request, just return data
 	if kv.history[op.ClientID] >= op.RequestNo {
 		reply.err = OK
 		reply.op.Value = kv.data[op.Key]
@@ -94,7 +93,6 @@ func (kv *RaftKV) commitLog(op Op) CommitReply {
 		return reply
 	}
 
-	// commit log
 	index, term, isLeader := kv.rf.Start(op)
 	ch := make(chan CommitReply, 1)
 	kv.commitReply[index] = ch
@@ -140,13 +138,11 @@ func (kv *RaftKV) applyLog(op Op) ApplyReply {
 	reply.err = OK
 	reply.op = op
 
-	// duplicate request, just return data
 	if kv.history[op.ClientID] >= op.RequestNo {
 		reply.op.Value = kv.data[op.Key]
 		return reply
 	}
 
-	// apply log
 	switch op.Op {
 	case "Get":
 		_, ok := kv.data[op.Key]
@@ -159,9 +155,7 @@ func (kv *RaftKV) applyLog(op Op) ApplyReply {
 		kv.data[op.Key] += op.Value
 	}
 	reply.op.Value = kv.data[op.Key]
-	// save session
 	kv.history[op.ClientID] = op.RequestNo
-
 	return reply
 }
 
@@ -175,7 +169,6 @@ func (kv *RaftKV) watch() {
 			op := msg.Command.(Op)
 			applyReply := kv.applyLog(op)
 
-			// only leader have reply channel
 			rplChan, ok := kv.commitReply[msg.Index]
 			if ok {
 				rplChan <- CommitReply(applyReply)
