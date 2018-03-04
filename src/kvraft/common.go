@@ -18,9 +18,12 @@ type PutAppendArgs struct {
 	// otherwise RPC will break.
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 	ClientID int64 // for duplicate request detection
 	SeqNo    int   // sequence no
+=======
+>>>>>>> parent of df1a00b... finish
 =======
 >>>>>>> parent of df1a00b... finish
 =======
@@ -37,8 +40,11 @@ type GetArgs struct {
 	// You'll have to add definitions here.
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 	ClientID int64
 	SeqNo    int
+=======
+>>>>>>> parent of df1a00b... finish
 =======
 >>>>>>> parent of df1a00b... finish
 =======
